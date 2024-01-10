@@ -48,7 +48,6 @@ print("Going towards second point for 120 seconds (groundspeed set to 10 m/s) ..
 point2 = LocationGlobalRelative(50.443326, 30.448078, 20)
 
 def fly_to_point_b(point2):
-    print('Я уже в функции полета')
     if point2 is None:
         print("No target point provided.")
         return
