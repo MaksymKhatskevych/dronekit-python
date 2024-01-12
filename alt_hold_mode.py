@@ -81,7 +81,6 @@ def move_to_point(target_location):
         # For example, you can set pitch and roll to 0 for maintaining current heading
         # and adjust throttle to control the altitude
 
-        # Replace the following lines with your joystick control logic
         pitch = 0
         roll = 0
         throttle = 1500  # Adjust as needed
