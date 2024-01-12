@@ -1,97 +1,114 @@
 from __future__ import print_function
+from math import radians
 from dronekit import connect, VehicleMode, LocationGlobalRelative
 import time
-from pymavlink import mavutil
 
+print("Start")
 
-
+# Подключение к SITL симулятору
 connection_string = 'tcp:127.0.0.1:5763'
-
-
 
 print("\nConnecting to vehicle on: %s" % connection_string)
 vehicle = connect(connection_string, wait_ready=True)
 
+point_A = LocationGlobalRelative(50.450739, 30.461242, 50)  # Точка А
+point_B = LocationGlobalRelative(50.443326, 30.448078, 100)  # Точка Б
 
 def arm_and_takeoff(aTargetAltitude):
+    """
+    Arms vehicle and fly to aTargetAltitude.
+    """
+
     print("Basic pre-arm checks")
+    
+    # Don't try to arm until autopilot is ready
     while not vehicle.is_armable:
         print(" Waiting for vehicle to initialise...")
         time.sleep(1)
-
+    
     print("Arming motors")
-    vehicle.mode = VehicleMode("GUIDED")
+    # Copter should arm in GUIDED mode
+    vehicle.mode = VehicleMode("ALT_HOLD")
     vehicle.armed = True
-
-
+    print('_____', vehicle.mode.name)
+    
+    # Confirm vehicle armed before attempting to take off
     while not vehicle.armed:
+        print(" Altitude: ", vehicle.attitude.yaw)
         print(" Waiting for arming...")
         time.sleep(1)
-
-    print("Taking off!")
-    vehicle.simple_takeoff(aTargetAltitude)
+    
+    print(" Altitude_alt: ", vehicle.location.global_relative_frame.alt)
 
     while True:
-        print(" Altitude: ", vehicle.location.global_relative_frame.alt)
-        # Break and return from function just below target altitude.
-        if vehicle.location.global_relative_frame.alt >= aTargetAltitude * 0.95:
+        current_altitude = vehicle.location.global_relative_frame.alt
+
+        if current_altitude <= aTargetAltitude - 3:
+            vehicle.channels.overrides = {'3': 1900}
+            print("Altitude <= 7: ", current_altitude)
+        elif current_altitude >= aTargetAltitude - 0.2:
+            vehicle.channels.overrides = {'2': 1000, '3': 1500}
+            print("Altitude >= 9.8: ", current_altitude)
+            print("GO", current_altitude)
+        else:
+            vehicle.channels.overrides = {'3': 1700}
+            print("Stabilizing altitude: ", current_altitude)
+
+        if current_altitude >= aTargetAltitude - 0.2:
             print("Reached target altitude")
             break
+
         time.sleep(1)
 
-
-arm_and_takeoff(20)
-time.sleep(20)
-
-
-print("Going towards second point for 120 seconds (groundspeed set to 10 m/s) ...")
-point2 = LocationGlobalRelative(50.443326, 30.448078, 20)
-
-def fly_to_point_b(point2):
-    if point2 is None:
-        print("No target point provided.")
-        return
-
-    print("Going towards second point in ALT_HOLD mode...")
+def set_alt_hold_mode():
+    """
+    Set the vehicle mode to ALT_HOLD.
+    """
+    print("Setting ALT_HOLD mode")
     vehicle.mode = VehicleMode("ALT_HOLD")
-
-    while vehicle.location.global_relative_frame.alt < 9.5:
-        print("Waiting for stable altitude...")
+    while vehicle.mode.name != "ALT_HOLD":
+        print(" Waiting for ALT_HOLD mode...")
         time.sleep(1)
+    print("ALT_HOLD mode set")
 
+def move_to_point(target_location):
+    """
+    Move the vehicle to the specified location using joystick override.
+    """
+    print("Moving to point with joystick override")
+    while vehicle.location.global_relative_frame.get_distance(target_location) > 1:
+        # Calculate joystick values for pitch, roll, and throttle here
+        # For example, you can set pitch and roll to 0 for maintaining current heading
+        # and adjust throttle to control the altitude
 
-    vehicle.channels.overrides = {'1': 1000, '3': 1700}
-    time.sleep(100)
+        # Replace the following lines with your joystick control logic
+        pitch = 0
+        roll = 0
+        throttle = 1500  # Adjust as needed
 
-    while not vehicle.mode.name == 'ALT_HOLD':
-        print("Waiting for ALT_HOLD mode...")
-        time.sleep(1)
+        vehicle.channels.overrides = {'1': pitch, '2': roll, '3': throttle}
+        time.sleep(0.1)
 
-fly_to_point_b(LocationGlobalRelative(50.443326, 30.448078, 10))
+    print("Reached target location")
 
-time.sleep(20)
-while True:
-    vehicle.channels.overrides = {'4': 1600}
-    print(" Altitude: ", vehicle.attitude.yaw)
+def turn_to_heading(target_heading):
+    """
+    Turn the vehicle to the specified heading.
+    """
+    current_heading = vehicle.attitude.yaw
+    while abs(current_heading - target_heading) > 2:
+        vehicle.channels.overrides = {'4': 1300}
+        current_heading = vehicle.attitude.yaw
+        time.sleep(0.1)
+    vehicle.channels.overrides = {}
+    print("Reached target heading")
 
-    if vehicle.attitude.yaw >= 350:
-        vehicle.channels.overrides = {'4': 1500}
-        print("Reached target altitude___")
-        break
-    time.sleep(0.3)
+def arm_and_takeoff_and_goto(aTargetAltitude, target_location):
+    arm_and_takeoff(aTargetAltitude)
+    set_alt_hold_mode()
+    move_to_point(target_location)
+    print("Turning to yaw 350 degrees")
+    turn_to_heading(350)
 
-"""def set_yaw(angle):
-    msg = vehicle.message_factory.command_long_encode(
-        0, 0, mavutil.mavlink.MAV_CMD_CONDITION_YAW, 0,
-        radians(angle), 
-        0, 1, 0, 0, 0, 0
-    )
-    vehicle.send_mavlink(msg)
-    vehicle.flush()
-
-yaw_angle = 350
-set_yaw(yaw_angle)"""
-
-time.sleep(20)
-print("Close vehicle object")
-vehicle.close()
+# Виклик функції:
+arm_and_takeoff_and_goto(100, point_B)
